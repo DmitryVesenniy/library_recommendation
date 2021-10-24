@@ -1,12 +1,11 @@
 import os
 import json
-import random
 from typing import Dict
 
 from settings import BASE_PATH
 from fastapi import APIRouter, Depends, HTTPException, status
 from schemas.predict import Recommendation, RequestModel
-from services.knn_service import get_neighbors
+from services.knn_service import get_neighbors, get_top_books
 
 from global_state.state import STATE
 
@@ -37,20 +36,11 @@ async def get_recommendation(user: RequestModel):
     if not user_data:
         # загружаем топовые книги и рекомендуем их
         try:
-            with open(file_name_top, 'r') as f:
-                recommendation = json.loads(f.read())
-                books = recommendation["recommendations"]
-                random.shuffle(books)
-            return {
-                "recommendations": books[:40]
-            }
+            return get_top_books(file_name_top, 40)
         except Exception as e:
             return {"error": str(e)}
 
     row_index = STATE.users_collections.get_index(user_data["id"])
-
-    print("row_index: ", row_index)
-    print("user_data: ", user_data)
 
     recommended_items = get_neighbors(row_index, 500)
 
@@ -70,7 +60,16 @@ async def get_recommendation(user: RequestModel):
 
     user_books = user_data["books"]
 
-    recommendation_book_ids = (set(book_ids_from_rubrics) & set(books_ids_from_books)) - set(user_books)
+    if len(books_ids_from_books) > 0:
+        books_crossing = (set(book_ids_from_rubrics) & set(books_ids_from_books)) - set(user_books)
+        if len(books_crossing) == 0:
+            recommendation_book_ids = set(books_ids_from_books) - set(user_books)
+
+        else:
+            recommendation_book_ids = books_crossing
+
+    else:
+        recommendation_book_ids = set(book_ids_from_rubrics) - set(user_books)
 
     recommendation = {
         "recommendations": [],
@@ -86,9 +85,6 @@ async def get_recommendation(user: RequestModel):
                 "author": _book["author"]
             })
 
-        # if i > COUNT_BOOKS_AS_RESULT :
-        #     break
-
     for i, book_id in enumerate(recommendation_book_ids):
         _book = STATE.books_collections.get_item_from_id(book_id)
         if _book:
@@ -100,6 +96,11 @@ async def get_recommendation(user: RequestModel):
 
         if i > COUNT_BOOKS_AS_RESULT:
             break
+
+    if len(recommendation["recommendations"]) == 0:
+        # если мы не получили никаких рекомендаций, то советуем самые топовые книги
+        top_books = get_top_books(file_name_top, 40)
+        recommendation["recommendations"] = top_books["recommendations"]
 
     try:
         with open(file_name_user, 'w') as f:
