@@ -21,3 +21,6 @@ ____
 ### `recommendation` - Все, что связанно с обучающейся моделью
 ### `api` - Сервис API
 
+# АПИ
+`response: /recommendation POST {id: number}`
+`request: {recommendation: Array<{id: number, title: string}>, history: Array<{id: number, title: string}>}`
