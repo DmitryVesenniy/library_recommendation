@@ -3,6 +3,7 @@ import shutil
 import json
 from typing import Dict
 from collections import defaultdict
+from multiprocessing import Process, cpu_count
 
 import pandas as pd
 import numpy as np
@@ -83,75 +84,100 @@ def train(
     top_books_counter = defaultdict(int)
 
     if is_calculate_all:
-        for j, user in enumerate(users_collection.collection):
-            index = j
-            row = rows[index]
+        tasks = []
+        chunk = int(len(users_collection.collection) / cpu_count()) + 1
 
-            #########
-            knn_result = knn_book.kneighbors(row, n_neighbors=n_coll)
-            neighbors = knn_result[1]
-            scores = np.asarray(user_book_sparse.tocsr()[neighbors[0]].sum(axis=0)[0]).flatten()
-            top_indices = np.argsort(-scores)
-            recommended_items = top_indices[:500]
+        user_list = users_collection.collection
 
-            books_ids_from_books = []
-            for book_col in recommended_items:
-                _book = books_collection.get_item_from_index(book_col)
-                if _book:
-                    books_ids_from_books.append(_book["id"])
+        for index_process in range(cpu_count()):
+            print(f"!!! start process: {index_process + 1}")
+            start_index = index_process * chunk
+            end_index = start_index + chunk - 1
+            proc = Process(target=user_item_recommendation, args=(
+                user_list[start_index:end_index],
+                rows,
+                user_book_sparse,
+                knn_book,
+                users_collection,
+                books_collection,
+                rubrics_collection,
+                n_coll,
+                out_db,
+            ))
 
-            book_ids_from_rubrics = []
+            tasks.append(proc)
+            proc.start()
 
-            for _book_id in user["books"]:
+        for proc in tasks:
+            proc.join()
+        # for j, user in enumerate(users_collection.collection):
+        #     index = j
+        #     row = rows[index]
+        #
+        #     #########
+        #     knn_result = knn_book.kneighbors(row, n_neighbors=n_coll)
+        #     neighbors = knn_result[1]
+        #     scores = np.asarray(user_book_sparse.tocsr()[neighbors[0]].sum(axis=0)[0]).flatten()
+        #     top_indices = np.argsort(-scores)
+        #     recommended_items = top_indices[:500]
+        #
+        #     books_ids_from_books = []
+        #     for book_col in recommended_items:
+        #         _book = books_collection.get_item_from_index(book_col)
+        #         if _book:
+        #             books_ids_from_books.append(_book["id"])
+        #
+        #     book_ids_from_rubrics = []
+        #
+        #     for _book_id in user["books"]:
+        #
+        #         top_books_counter[_book_id] += 1
+        #
+        #         rubric_id = books_collection.get_item_from_id(_book_id).get("rubric_id")
+        #         if rubric_id:
+        #             rubric = rubrics_collection.get_item_from_id(rubric_id)
+        #             book_ids_from_rubrics.extend(rubric["books"])
+        #
+        #     user_books = user["books"]
+        #
+        #     recommendation_book_ids = (set(book_ids_from_rubrics) & set(books_ids_from_books)) - set(user_books)
+        #
+        #     user_data = {
+        #         "recommendations": [],
+        #         "history": [],
+        #     }
+        #
+        #     for i, book_id in enumerate(user_books):
+        #         _book = books_collection.get_item_from_id(book_id)
+        #         if _book:
+        #             user_data["history"].append({
+        #                 "id": _book["id"],
+        #                 "title": _book["title"],
+        #                 "author": _book["author"]
+        #             })
+        #
+        #         if i > COUNT_BOOKS_AS_RESULT:
+        #             break
+        #
+        #     for i, book_id in enumerate(recommendation_book_ids):
+        #         _book = books_collection.get_item_from_id(book_id)
+        #         if _book:
+        #             user_data["recommendations"].append({
+        #                 "id": _book["id"],
+        #                 "title": _book["title"],
+        #                 "author": _book["author"]
+        #             })
+        #
+        #         if i > COUNT_BOOKS_AS_RESULT:
+        #             break
+        #
+        #     file_name = f"{user['id']}_data.json"
+        #     with open(os.path.join(out_db, file_name), 'w') as f:
+        #         f.write(json.dumps(user_data))
 
-                top_books_counter[_book_id] += 1
-
-                rubric_id = books_collection.get_item_from_id(_book_id).get("rubric_id")
-                if rubric_id:
-                    rubric = rubrics_collection.get_item_from_id(rubric_id)
-                    book_ids_from_rubrics.extend(rubric["books"])
-
-            user_books = user["books"]
-
-            recommendation_book_ids = (set(book_ids_from_rubrics) & set(books_ids_from_books)) - set(user_books)
-
-            user_data = {
-                "recommendations": [],
-                "history": [],
-            }
-
-            for i, book_id in enumerate(user_books):
-                _book = books_collection.get_item_from_id(book_id)
-                if _book:
-                    user_data["history"].append({
-                        "id": _book["id"],
-                        "title": _book["title"],
-                        "author": _book["author"]
-                    })
-
-                if i > COUNT_BOOKS_AS_RESULT:
-                    break
-
-            for i, book_id in enumerate(recommendation_book_ids):
-                _book = books_collection.get_item_from_id(book_id)
-                if _book:
-                    user_data["recommendations"].append({
-                        "id": _book["id"],
-                        "title": _book["title"],
-                        "author": _book["author"]
-                    })
-
-                if i > COUNT_BOOKS_AS_RESULT:
-                    break
-
-            file_name = f"{user['id']}_data.json"
-            with open(os.path.join(out_db, file_name), 'w') as f:
-                f.write(json.dumps(user_data))
-
-    else:
-        for j, user in enumerate(users_collection.collection):
-            for _book_id in user["books"]:
-                top_books_counter[_book_id] += 1
+    for j, user in enumerate(users_collection.collection):
+        for _book_id in user["books"]:
+            top_books_counter[_book_id] += 1
 
     # находим самые топовые книги для анонимных пользователей
     top_books = list(top_books_counter.keys())
@@ -270,3 +296,84 @@ def save_sparse(path: str, filename: str, array: sparse.coo_matrix) -> None:
     sparse.save_npz(os.path.join(path, filename), array)
 
 
+def user_item_recommendation(
+        user_items_list: list,
+        rows: list,
+        user_book_sparse: sparse,
+        knn: NearestNeighbors,
+        users_collection: CollectionHelper,
+        books_collection: CollectionHelper,
+        rubrics_collection: CollectionHelper,
+        n_coll: int,
+        out_db: str,
+):
+    for j, user in enumerate(user_items_list):
+        index = j
+        row = rows[index]
+
+        knn_result = knn.kneighbors(row, n_neighbors=n_coll)
+        neighbors = knn_result[1]
+        scores = np.asarray(user_book_sparse.tocsr()[neighbors[0]].sum(axis=0)[0]).flatten()
+        top_indices = np.argsort(-scores)
+        recommended_items = top_indices[:500]
+
+        books_ids_from_books = []
+        for book_col in recommended_items:
+            _book = books_collection.get_item_from_index(book_col)
+            if _book:
+                books_ids_from_books.append(_book["id"])
+
+        book_ids_from_rubrics = []
+
+        for _book_id in user["books"]:
+
+            rubric_id = books_collection.get_item_from_id(_book_id).get("rubric_id")
+            if rubric_id:
+                rubric = rubrics_collection.get_item_from_id(rubric_id)
+                book_ids_from_rubrics.extend(rubric["books"])
+
+        user_books = user["books"]
+
+        if len(books_ids_from_books) > 0:
+            books_crossing = (set(book_ids_from_rubrics) & set(books_ids_from_books)) - set(user_books)
+            if len(books_crossing) == 0:
+                recommendation_book_ids = set(books_ids_from_books) - set(user_books)
+
+            else:
+                recommendation_book_ids = books_crossing
+
+        else:
+            recommendation_book_ids = set(book_ids_from_rubrics) - set(user_books)
+
+        user_data = {
+            "recommendations": [],
+            "history": [],
+        }
+
+        for i, book_id in enumerate(user_books):
+            _book = books_collection.get_item_from_id(book_id)
+            if _book:
+                user_data["history"].append({
+                    "id": _book["id"],
+                    "title": _book["title"],
+                    "author": _book["author"]
+                })
+
+            if i > COUNT_BOOKS_AS_RESULT:
+                break
+
+        for i, book_id in enumerate(recommendation_book_ids):
+            _book = books_collection.get_item_from_id(book_id)
+            if _book:
+                user_data["recommendations"].append({
+                    "id": _book["id"],
+                    "title": _book["title"],
+                    "author": _book["author"]
+                })
+
+            if i > COUNT_BOOKS_AS_RESULT:
+                break
+
+        file_name = f"{user['id']}_data.json"
+        with open(os.path.join(out_db, file_name), 'w') as f:
+            f.write(json.dumps(user_data))
