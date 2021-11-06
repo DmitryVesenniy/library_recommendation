@@ -5,6 +5,9 @@ from variables import BASE_PATH, BOOKS_DATA_JSN, DATA_PATH
 
 
 def main():
+    if not os.path.isdir(DATA_PATH):
+        os.mkdir(DATA_PATH)
+
     books, rubrics, collapsed_ref_ids, collapse_field = transform_to_valid_data(BOOKS_DATA_JSN)
 
     save_valid_data(os.path.join(DATA_PATH, "books.json"), books)
