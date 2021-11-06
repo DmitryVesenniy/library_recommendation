@@ -27,3 +27,6 @@ ____
 
 ### DATASET
 `https://disk.yandex.ru/d/jG-LLWB37O-G3w`
+
+### Файл с рекомендациями для каждого пользователя
+`result.csv`
