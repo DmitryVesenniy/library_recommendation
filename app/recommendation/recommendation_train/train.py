@@ -116,14 +116,29 @@ def train(
         for _book_id in user["books"]:
             top_books_counter[_book_id] += 1
 
-    # находим самые топовые книги для анонимных пользователей
-    top_books = list(top_books_counter.keys())
-    top_books.sort(key=lambda x: top_books_counter[x], reverse=True)
+    # ищем среднего пользователя для холодного старта
+    averages = (user_book_sparse.sum(0) / user_book_sparse.shape[0]).A
+
+    knn_result = knn_book.kneighbors(averages, n_neighbors=n_coll)
+    neighbors = knn_result[1]
+    scores = np.asarray(user_book_sparse.tocsr()[neighbors[0]].sum(axis=0)[0]).flatten()
+    top_indices = np.argsort(-scores)
+    recommended_items_hold = top_indices[:500]
+
+    books_ids_from_books = []
+    for book_col in recommended_items_hold:
+        _book = books_collection.get_item_from_index(book_col)
+        if _book:
+            books_ids_from_books.append(_book["id"])
+
+    # # находим самые топовые книги для анонимных пользователей
+    # top_books = list(top_books_counter.keys())
+    # top_books.sort(key=lambda x: top_books_counter[x], reverse=True)
 
     top_books_result = {
         "recommendations": [],
     }
-    for i, book_id in enumerate(top_books):
+    for i, book_id in enumerate(books_ids_from_books):
         _book = books_collection.get_item_from_id(book_id)
         if _book:
             top_books_result["recommendations"].append({
