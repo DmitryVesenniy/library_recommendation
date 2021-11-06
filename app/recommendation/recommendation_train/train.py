@@ -134,23 +134,22 @@ def train(
         if _book:
             books_ids_from_books.append(_book["id"])
 
-    # # находим самые топовые книги для анонимных пользователей
-    # top_books = list(top_books_counter.keys())
-    # top_books.sort(key=lambda x: top_books_counter[x], reverse=True)
-
     top_rubrics = list(top_rubrics_counter.keys())
     top_rubrics.sort(key=lambda x: top_rubrics_counter[x], reverse=True)
     top_rubrics = top_rubrics[:100]
 
+    top_rubrics_book_ids = []
     for _rubric_id in top_rubrics:
         _rubric = rubrics_collection.get_item_from_id(_rubric_id)
         if _rubric:
-            print(">> ", _rubric["rubric_name"])
+            top_rubrics_book_ids.extend(_rubric["books"])
+
+    top_recommendation = top_rubrics_book_ids
 
     top_books_result = {
         "recommendations": [],
     }
-    for i, book_id in enumerate(books_ids_from_books):
+    for i, book_id in enumerate(top_recommendation):
         _book = books_collection.get_item_from_id(book_id)
         if _book:
             top_books_result["recommendations"].append({
