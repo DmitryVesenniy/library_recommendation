@@ -83,6 +83,7 @@ def train(
     knn_book.fit(user_book_sparse)
 
     top_books_counter = defaultdict(int)
+    top_rubrics_counter = defaultdict(int)
 
     if is_calculate_all:
         tasks = []
@@ -115,6 +116,8 @@ def train(
     for j, user in enumerate(users_collection.collection):
         for _book_id in user["books"]:
             top_books_counter[_book_id] += 1
+            _book = books_collection.get_item_from_id(_book_id)
+            top_rubrics_counter[_book["rubric_id"]] += 1
 
     # ищем среднего пользователя для холодного старта
     averages = (user_book_sparse.sum(0) / user_book_sparse.shape[0]).A
@@ -134,6 +137,15 @@ def train(
     # # находим самые топовые книги для анонимных пользователей
     # top_books = list(top_books_counter.keys())
     # top_books.sort(key=lambda x: top_books_counter[x], reverse=True)
+
+    top_rubrics = list(top_rubrics_counter.keys())
+    top_rubrics.sort(key=lambda x: top_rubrics_counter[x], reverse=True)
+    top_rubrics = top_rubrics[:100]
+
+    for _rubric_id in top_rubrics:
+        _rubric = rubrics_collection.get_item_from_id(_rubric_id)
+        if _rubric:
+            print(">> ", _rubric["rubric_name"])
 
     top_books_result = {
         "recommendations": [],
