@@ -8,6 +8,9 @@ from schemas.predict import Recommendation, RequestModel
 from services.knn_service import get_neighbors, get_top_books
 
 from global_state.state import STATE
+import global_state.depends
+
+from recommendation_train.recommendation_format import recommendation_format_to_user
 
 router = APIRouter()
 
@@ -44,58 +47,66 @@ async def get_recommendation(user: RequestModel):
 
     recommended_items = get_neighbors(row_index, 500)
 
-    books_ids_from_books = []
-    for book_col in recommended_items:
-        _book = STATE.books_collections.get_item_from_index(book_col)
-        if _book:
-            books_ids_from_books.append(_book["id"])
+    # books_ids_from_books = []
+    # for book_col in recommended_items:
+    #     _book = STATE.books_collections.get_item_from_index(book_col)
+    #     if _book:
+    #         books_ids_from_books.append(_book["id"])
+    #
+    # book_ids_from_rubrics = []
+    #
+    # for _book_id in user_data["books"]:
+    #     rubric_id = STATE.books_collections.get_item_from_id(_book_id).get("rubric_id")
+    #     if rubric_id:
+    #         rubric = STATE.rubrics_collections.get_item_from_id(rubric_id)
+    #         book_ids_from_rubrics.extend(rubric["books"])
+    #
+    # user_books = user_data["books"]
+    #
+    # if len(books_ids_from_books) > 0:
+    #     books_crossing = (set(book_ids_from_rubrics) & set(books_ids_from_books)) - set(user_books)
+    #     if len(books_crossing) == 0:
+    #         recommendation_book_ids = set(books_ids_from_books) - set(user_books)
+    #
+    #     else:
+    #         recommendation_book_ids = books_crossing
+    #
+    # else:
+    #     recommendation_book_ids = set(book_ids_from_rubrics) - set(user_books)
+    #
+    # recommendation = {
+    #     "recommendations": [],
+    #     "history": [],
+    # }
+    #
+    # for i, book_id in enumerate(user_books):
+    #     _book = STATE.books_collections.get_item_from_id(book_id)
+    #     if _book:
+    #         recommendation["history"].append({
+    #             "id": _book["id"],
+    #             "title": _book["title"],
+    #             "author": _book["author"]
+    #         })
+    #
+    # for i, book_id in enumerate(recommendation_book_ids):
+    #     _book = STATE.books_collections.get_item_from_id(book_id)
+    #     if _book:
+    #         recommendation["recommendations"].append({
+    #             "id": _book["id"],
+    #             "title": _book["title"],
+    #             "author": _book["author"]
+    #         })
+    #
+    #     if i > COUNT_BOOKS_AS_RESULT:
+    #         break
 
-    book_ids_from_rubrics = []
-
-    for _book_id in user_data["books"]:
-        rubric_id = STATE.books_collections.get_item_from_id(_book_id).get("rubric_id")
-        if rubric_id:
-            rubric = STATE.rubrics_collections.get_item_from_id(rubric_id)
-            book_ids_from_rubrics.extend(rubric["books"])
-
-    user_books = user_data["books"]
-
-    if len(books_ids_from_books) > 0:
-        books_crossing = (set(book_ids_from_rubrics) & set(books_ids_from_books)) - set(user_books)
-        if len(books_crossing) == 0:
-            recommendation_book_ids = set(books_ids_from_books) - set(user_books)
-
-        else:
-            recommendation_book_ids = books_crossing
-
-    else:
-        recommendation_book_ids = set(book_ids_from_rubrics) - set(user_books)
-
-    recommendation = {
-        "recommendations": [],
-        "history": [],
-    }
-
-    for i, book_id in enumerate(user_books):
-        _book = STATE.books_collections.get_item_from_id(book_id)
-        if _book:
-            recommendation["history"].append({
-                "id": _book["id"],
-                "title": _book["title"],
-                "author": _book["author"]
-            })
-
-    for i, book_id in enumerate(recommendation_book_ids):
-        _book = STATE.books_collections.get_item_from_id(book_id)
-        if _book:
-            recommendation["recommendations"].append({
-                "id": _book["id"],
-                "title": _book["title"],
-                "author": _book["author"]
-            })
-
-        if i > COUNT_BOOKS_AS_RESULT:
-            break
+    recommendation = recommendation_format_to_user(
+        recommended_items,
+        STATE.books_collections,
+        STATE.rubrics_collections,
+        user_data,
+        COUNT_BOOKS_AS_RESULT
+    )
 
     if len(recommendation["recommendations"]) == 0:
         # если мы не получили никаких рекомендаций, то советуем самые топовые книги
